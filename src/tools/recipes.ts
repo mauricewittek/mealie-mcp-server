@@ -737,7 +737,7 @@ export function registerRecipeTools(server: McpServer) {
   // @endpoints GET /api/recipes/{slug}, PATCH /api/recipes/{slug}
   server.tool(
     'patch_recipe',
-    'Partially updates a recipe. Also accepts optional categories/tags/taxonomyMode/createMissing for taxonomy assignment. Unchanged Category/Tag collections are never written; if taxonomy is the only thing requested and nothing changes, no PATCH is issued and the current recipe is returned with taxonomyChanges.',
+    'Partially updates a recipe. Optional categories/tags/taxonomyMode/createMissing assign taxonomy; unchanged Category/Tag collections are never written and, if taxonomy is the only thing requested and nothing changes, no PATCH is issued and the current recipe is returned with taxonomyChanges. Optional instructions is the complete new list of steps (not a patch): it replaces all steps, [] clears them, omitting it leaves them unchanged.',
     {
       slug: z.string(),
       name: z.string().optional(),
@@ -748,14 +748,18 @@ export function registerRecipeTools(server: McpServer) {
       tags: tagsParamSchema.optional(),
       taxonomyMode: taxonomyModeSchema.optional(),
       createMissing: createMissingSchema.optional(),
+      instructions: z.array(z.string()).optional().describe('Complete new list of steps, in order. Replaces all steps; [] clears them.'),
     },
-    async ({ slug, categories, tags, taxonomyMode, createMissing, ...rest }) => {
+    async ({ slug, categories, tags, taxonomyMode, createMissing, instructions, ...rest }) => {
       try {
         const data: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(rest)) {
           if (value !== undefined) {
             data[key] = value;
           }
+        }
+        if (instructions !== undefined) {
+          data.recipeInstructions = instructions.map((text) => ({ text }));
         }
 
         let taxonomyChanges: { categories?: unknown; tags?: unknown } | undefined;

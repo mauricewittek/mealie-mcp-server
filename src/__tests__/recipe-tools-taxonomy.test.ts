@@ -118,6 +118,33 @@ describe('patch_recipe backward compatibility', () => {
   });
 });
 
+describe('patch_recipe with instructions', () => {
+  it('maps instructions to recipeInstructions in the patch payload alongside other fields', async () => {
+    const handler = handlers.get('patch_recipe')!;
+    await handler({ slug: 'chicken-shawarma', name: 'New Name', instructions: ['A.', 'B.', 'C.'] });
+
+    expect(mockPatchRecipe).toHaveBeenCalledWith('chicken-shawarma', {
+      name: 'New Name',
+      recipeInstructions: [{ text: 'A.' }, { text: 'B.' }, { text: 'C.' }],
+    });
+    expect(mockGetRecipe).not.toHaveBeenCalled();
+  });
+
+  it('sends an empty recipeInstructions list for [] so all steps are cleared', async () => {
+    const handler = handlers.get('patch_recipe')!;
+    await handler({ slug: 'chicken-shawarma', instructions: [] });
+
+    expect(mockPatchRecipe).toHaveBeenCalledWith('chicken-shawarma', { recipeInstructions: [] });
+  });
+
+  it('leaves recipeInstructions out of the payload when instructions is omitted', async () => {
+    const handler = handlers.get('patch_recipe')!;
+    await handler({ slug: 'chicken-shawarma', name: 'New Name' });
+
+    expect(mockPatchRecipe.mock.calls[0][1]).not.toHaveProperty('recipeInstructions');
+  });
+});
+
 describe('patch_recipe with taxonomy fields', () => {
   it('fetches the recipe and merges category/tag changes into a single patch call', async () => {
     const handler = handlers.get('patch_recipe')!;

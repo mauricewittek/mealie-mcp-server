@@ -22,6 +22,7 @@ export interface UpdateFoodInput {
   description?: string;
   aliases?: string[];
   labelId?: string | null;
+  householdsWithIngredientFood?: string[];
 }
 
 // Fields Mealie's PUT /api/foods/{id} accepts (the CreateIngredientFood shape). The GET
@@ -114,7 +115,8 @@ export async function updateFood(
     input.pluralName === undefined &&
     input.description === undefined &&
     input.aliases === undefined &&
-    input.labelId === undefined
+    input.labelId === undefined &&
+    input.householdsWithIngredientFood === undefined
   ) {
     throw new Error('At least one field must be supplied for an update.');
   }
@@ -134,6 +136,9 @@ export async function updateFood(
     if (input.description !== undefined) payload.description = input.description;
     if (input.aliases !== undefined) payload.aliases = toAliasPayload(input.aliases);
     if (input.labelId !== undefined) payload.labelId = input.labelId;
+    if (input.householdsWithIngredientFood !== undefined) {
+      payload.householdsWithIngredientFood = input.householdsWithIngredientFood;
+    }
 
     return await apiPut<Record<string, unknown>>(`/api/foods/${id}`, payload);
   } catch (error) {

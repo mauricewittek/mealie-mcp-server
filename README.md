@@ -156,7 +156,7 @@ yarn lint
 ```
 
 <!-- BEGIN GENERATED TOOLS -->
-## Available Tools (75 total)
+## Available Tools (76 total)
 
 ### Recipes (24)
 `create_recipe`, `delete_recipe`, `duplicate_recipe`, `find_recipes_for_ingredients`, `get_recipe_concise`, `get_recipe_detailed`, `get_recipes`, `get_recipes_batch`, `get_recipes_detailed_batch`, `get_recipes_for_classification`, `get_recipes_for_data_enrichment`, `get_recipes_for_ingredient_parsing`, `mark_recipe_last_made`, `patch_recipe`, `set_recipe_image`, `set_recipe_image_from_url`, `update_recipe_ingredients`, `update_recipe_ingredients_batch`, `update_recipe_instructions`, `update_recipe_instructions_batch`, `update_recipe_taxonomy`, `update_recipe_taxonomy_batch`, `update_recipe_tools`, `update_recipe_tools_batch`
@@ -173,8 +173,8 @@ yarn lint
 ### Shopping Lists (13)
 `add_recipe_to_shopping_list`, `create_shopping_list`, `create_shopping_list_item`, `create_shopping_list_items_bulk`, `delete_shopping_list`, `delete_shopping_list_item`, `delete_shopping_list_items_bulk`, `get_shopping_list`, `get_shopping_list_items`, `get_shopping_lists`, `remove_recipe_from_shopping_list`, `update_shopping_list`, `update_shopping_list_item`
 
-### Foods (6)
-`create_food`, `delete_food`, `get_food`, `get_food_matches`, `get_foods`, `update_food`
+### Foods (7)
+`create_food`, `delete_food`, `get_food`, `get_food_matches`, `get_foods`, `merge_foods`, `update_food`
 
 ### Units (6)
 `create_unit`, `delete_unit`, `get_unit`, `get_unit_matches`, `get_units`, `update_unit`

@@ -12,7 +12,7 @@ vi.mock('../api/client.js', async () => {
 });
 
 import { apiGet, apiPost, apiPut, apiDelete, MealieApiError } from '../api/client.js';
-import { getFoods, getFood, createFood, updateFood, deleteFood, getFoodMatches } from '../api/foods.js';
+import { getFoods, getFood, createFood, updateFood, deleteFood, getFoodMatches, mergeFoods } from '../api/foods.js';
 
 const mockGet = vi.mocked(apiGet);
 const mockPost = vi.mocked(apiPost);
@@ -378,6 +378,56 @@ describe('deleteFood', () => {
     mockDelete.mockRejectedValue(new MealieApiError(500, 'Internal Server Error'));
     await expect(deleteFood('food-1')).rejects.toThrow(/Unable to delete food/);
     await expect(deleteFood('food-1')).rejects.toThrow(/500/);
+  });
+});
+
+describe('mergeFoods', () => {
+  it('checks both foods, merges, confirms the from-food is gone and returns the target', async () => {
+    mockGet
+      .mockResolvedValueOnce(existingFood({ id: 'from' }))
+      .mockResolvedValueOnce(existingFood({ id: 'to' }))
+      .mockRejectedValueOnce(new MealieApiError(404, 'not found'))
+      .mockResolvedValueOnce(existingFood({ id: 'to' }));
+    mockPut.mockResolvedValue({ message: 'Successfully merged foods', error: false });
+
+    await expect(mergeFoods('from', 'to')).resolves.toMatchObject({ id: 'to' });
+
+    expect(mockPut).toHaveBeenCalledWith('/api/foods/merge', { fromFood: 'from', toFood: 'to' });
+    expect(mockGet.mock.calls.map((c) => c[0])).toEqual([
+      '/api/foods/from',
+      '/api/foods/to',
+      '/api/foods/from',
+      '/api/foods/to',
+    ]);
+  });
+
+  it('rejects equal ids without calling the API', async () => {
+    await expect(mergeFoods('food-1', ' food-1 ')).rejects.toThrow(/must be different/);
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
+  it('does not merge when either food is unknown', async () => {
+    mockGet
+      .mockResolvedValueOnce(existingFood({ id: 'from' }))
+      .mockRejectedValueOnce(new MealieApiError(404, 'not found'));
+
+    await expect(mergeFoods('from', 'missing')).rejects.toThrow(/Food not found: missing/);
+    expect(mockPut).not.toHaveBeenCalled();
+  });
+
+  it('points at shopping list items when Mealie fails the merge', async () => {
+    mockGet.mockResolvedValue(existingFood());
+    mockPut.mockRejectedValue(new MealieApiError(500, '{"detail":"Failed to merge foods"}'));
+
+    await expect(mergeFoods('from', 'to')).rejects.toThrow(/shopping list items.*Failed to merge foods/s);
+  });
+
+  it('fails when the from-food still exists after the merge', async () => {
+    mockGet.mockResolvedValue(existingFood());
+    mockPut.mockResolvedValue({});
+
+    await expect(mergeFoods('from', 'to')).rejects.toThrow(/still exists/);
   });
 });
 

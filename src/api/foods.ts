@@ -196,3 +196,46 @@ export async function deleteFood(foodId: string): Promise<Record<string, unknown
     );
   }
 }
+
+// Probed live against Mealie v3.20.1 with throwaway data:
+// - Recipe ingredient rows referencing the from-food are re-pointed to the to-food.
+// - The from-food is deleted; its name and its aliases are NOT kept on the to-food.
+// - Shopping list items referencing the from-food make the merge fail with a 500
+//   ("Failed to merge foods") and leave both foods untouched. Merging succeeds once
+//   those items are removed.
+export async function mergeFoods(fromFoodId: string, toFoodId: string): Promise<Record<string, unknown>> {
+  const fromId = fromFoodId?.trim();
+  const toId = toFoodId?.trim();
+  if (!fromId) {
+    throw new Error('fromFoodId is required.');
+  }
+  if (!toId) {
+    throw new Error('toFoodId is required.');
+  }
+  if (fromId === toId) {
+    throw new Error('fromFoodId and toFoodId must be different foods.');
+  }
+
+  await getFood(fromId);
+  await getFood(toId);
+
+  try {
+    await apiPut('/api/foods/merge', { fromFood: fromId, toFood: toId });
+  } catch (error) {
+    wrapError(
+      `Unable to merge food ${fromId} into ${toId}. If shopping list items still reference the from-food, ` +
+        'Mealie fails the merge; remove those items and retry',
+      error,
+    );
+  }
+
+  try {
+    await apiGet(`/api/foods/${fromId}`);
+  } catch (error) {
+    if (error instanceof MealieApiError && error.status === 404) {
+      return getFood(toId);
+    }
+    wrapError(`Merged, but unable to verify that food ${fromId} is gone`, error);
+  }
+  throw new Error(`Mealie reported a successful merge, but food ${fromId} still exists.`);
+}

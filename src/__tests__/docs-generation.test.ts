@@ -101,8 +101,8 @@ describe('docs generation invariants', () => {
     }
   }
 
-  it('registers exactly 76 tools', () => {
-    expect(allToolNames).toHaveLength(76);
+  it('registers exactly 77 tools', () => {
+    expect(allToolNames).toHaveLength(77);
   });
 
   it('every tool has at least one @endpoints', () => {

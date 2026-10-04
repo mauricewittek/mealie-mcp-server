@@ -5,6 +5,7 @@ import { buildTaxonomyPatch, updateRecipeTaxonomy, updateRecipeTaxonomyBatch } f
 import { updateRecipeTools, updateRecipeToolsBatch, RECIPE_TOOLS_BATCH_MAX_SIZE } from '../lib/recipe-tools.js';
 import { resolveTaxonomyFilter } from '../lib/taxonomy-resolution.js';
 import { setRecipeImage } from '../lib/recipe-image.js';
+import { setRecipeRating, RECIPE_RATING_MIN, RECIPE_RATING_MAX, RECIPE_RATING_STEP } from '../lib/recipe-rating.js';
 import { findRecipesForIngredients } from '../lib/find-recipes-for-ingredients.js';
 import {
   getRecipesForClassification,
@@ -1150,6 +1151,36 @@ export function registerRecipeTools(server: McpServer) {
     async ({ slug, imageBase64, extension }) => {
       try {
         const result = await setRecipeImage(slug, imageBase64, extension);
+        return successResponse(result);
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  // @endpoints GET /api/users/self, POST /api/users/{id}/ratings/{slug}, GET /api/recipes/{slug}, GET /api/users/self/ratings/{recipe_id}
+  server.tool(
+    'set_recipe_rating',
+    'Sets the rating and/or favorite flag of a recipe for the user behind the API key. The rating is per user; ' +
+      'the recipe\'s own `rating` field is the aggregate over all users (with a single rater they are equal). ' +
+      `rating is ${RECIPE_RATING_MIN}–${RECIPE_RATING_MAX} in steps of ${RECIPE_RATING_STEP} (Mealie itself does not validate the range); ` +
+      'null clears the caller\'s rating (stored as 0, reported as null); omit it to leave the rating unchanged. ' +
+      'isFavorite alone changes only the favorite flag. At least one of the two is required. ' +
+      'Returns { userRating: { recipeId, rating, isFavorite }, recipeRating } read back after the update.',
+    {
+      slug: z.string(),
+      rating: z
+        .number()
+        .min(RECIPE_RATING_MIN)
+        .max(RECIPE_RATING_MAX)
+        .multipleOf(RECIPE_RATING_STEP)
+        .nullable()
+        .optional(),
+      isFavorite: z.boolean().optional(),
+    },
+    async ({ slug, rating, isFavorite }) => {
+      try {
+        const result = await setRecipeRating({ slug, rating, isFavorite });
         return successResponse(result);
       } catch (error) {
         return errorResponse(error);

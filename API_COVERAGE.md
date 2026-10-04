@@ -2,7 +2,7 @@
 
 | Category | Tools |
 |---|---|
-| Recipes | 24 |
+| Recipes | 25 |
 | Meal Plans | 6 |
 | Categories | 7 |
 | Tags | 7 |
@@ -10,9 +10,9 @@
 | Foods | 7 |
 | Units | 6 |
 | Tools | 6 |
-| **Total** | **76** |
+| **Total** | **77** |
 
-## Recipes Operations (24)
+## Recipes Operations (25)
 
 - `create_recipe` — POST /api/recipes, PUT /api/recipes/{slug}
   Creates a new recipe. Optionally sets ingredients and instructions on creation.
@@ -77,6 +77,10 @@
 - `set_recipe_image_from_url` — POST /api/recipes/{slug}/image
   Sets a recipe's image from a URL.
   Params: `slug`, `imageUrl`
+
+- `set_recipe_rating` — GET /api/users/self, POST /api/users/{id}/ratings/{slug}, GET /api/recipes/{slug}, GET /api/users/self/ratings/{recipe_id}
+  Sets the rating and/or favorite flag of a recipe for the user behind the API key. The rating is per user; the recipe's own `rating` field is the aggregate over all users (with a single rater they are equal). rating is 0.5–5 in steps of 0.5 (Mealie itself does not validate the range); null clears the caller's rating (stored as 0, reported as null); omit it to leave the rating unchanged. isFavorite alone changes only the favorite flag. At least one of the two is required. Returns { userRating: { recipeId, rating, isFavorite }, recipeRating } read back after the update.
+  Params: `slug`, `rating`, `isFavorite`
 
 - `update_recipe_ingredients` — GET /api/recipes/{slug}, PATCH /api/recipes/{slug}
   Replaces the complete structured ingredient collection (recipeIngredient) of an existing recipe, leaving every other recipe field untouched (name, description, categories, tags, settings, nutrition, etc.). Known Mealie limitation, not caused by this tool: every recipe instruction's ID is regenerated on any recipe update (PATCH or PUT), including this one — instruction text/title/summary/ingredient-references are preserved correctly, only the IDs change. Low-level write primitive: it does not parse ingredient text and does not look up or create foods/units — foodId/unitId must already reference existing Mealie entities, resolved first with get_food_matches/get_unit_matches (batch, alias-aware lookup for several already-interpreted concepts at once — the normal path after parsing ingredient text) or get_foods/get_food/get_units/get_unit for a single manual lookup. The ingredients array is the recipe's complete new ingredient list, not a patch: any ingredient not included is removed, and an empty array clears all ingredients. Call get_recipe_detailed first to see the recipe's current ingredients, referenceIds, and other fields before replacing them. Note: each ingredient's "display" field is never actually persisted by Mealie — it is always recomputed from quantity/unit/food/note, regardless of what is supplied here. Integrity check: after writing, the recipe Mealie returns is verified — for every ingredient that supplied a foodId/unitId, the persisted food/unit must still be non-null, match the given id, and match the given name (case-insensitive against name/pluralName, plus abbreviation/pluralAbbreviation for units). If verification fails (e.g. a nonexistent or mismatched foodId/unitId that Mealie silently dropped or resolved to the wrong entity), the recipe is restored to its pre-write state on a best-effort basis and this call reports failure — never a silent partial write. Verification adds no extra request on success; a failed write adds one rollback request. Alternatively, use the delta form (addIngredients/updateIngredients/removeIngredientReferenceIds, instead of ingredients) to edit rows incrementally by stable referenceId: retained rows keep their order, updates edit in place, additions are appended or anchored with insertAfterReferenceId/insertBeforeReferenceId, and ingredient sections are just rows with a "title". The delta is applied to the recipe's current ingredients, the complete final collection is built, and the same verified write and rollback is used. Duplicate, unknown, or conflicting operations are rejected before any write. Note Mealie generates a fresh referenceId on every read for rows that never had one stored, so such a row may not be addressable by an id from an earlier read — use the complete-replacement form for it.

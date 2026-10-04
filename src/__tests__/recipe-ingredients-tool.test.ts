@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 vi.mock('../api/recipes.js', () => ({
@@ -31,12 +32,15 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<{
   isError?: boolean;
 }>;
 
+const shapes = new Map<string, Record<string, z.ZodType>>();
+
 function createMockServer(): { server: McpServer; handlers: Map<string, ToolHandler> } {
   const handlers = new Map<string, ToolHandler>();
   const server = {
     tool: (name: string, ...rest: unknown[]) => {
       const cb = rest[rest.length - 1] as ToolHandler;
       handlers.set(name, cb);
+      shapes.set(name, rest[rest.length - 2] as Record<string, z.ZodType>);
       return {};
     },
   };
@@ -199,5 +203,28 @@ describe('update_recipe_ingredients_batch tool', () => {
 
     expect(response.isError).toBe(true);
     expect(response.content[0].text).toMatch(/Duplicate recipe slug/);
+  });
+});
+
+describe('update_recipe_ingredients input schema — referencedRecipeId', () => {
+  const SAUCE_ID = '11111111-2222-4333-8444-555555555555';
+  const FOOD_ID = '22222222-3333-4444-8555-666666666666';
+
+  function parseIngredients(ingredients: unknown) {
+    return z.object(shapes.get('update_recipe_ingredients')).safeParse({ slug: 'r', ingredients });
+  }
+
+  it('accepts a reference row and keeps the id', () => {
+    const result = parseIngredients([{ title: 'Sauce', quantity: 1, referencedRecipeId: SAUCE_ID }]);
+    expect(result.success).toBe(true);
+    expect(result.data?.ingredients).toEqual([{ title: 'Sauce', quantity: 1, referencedRecipeId: SAUCE_ID }]);
+  });
+
+  it.each([
+    ['foodId', { foodId: FOOD_ID, foodName: 'onion' }],
+    ['unitId', { unitId: FOOD_ID, unitName: 'cup' }],
+  ])('rejects a reference combined with %s', (_label, extra) => {
+    const result = parseIngredients([{ referencedRecipeId: SAUCE_ID, ...extra }]);
+    expect(result.success).toBe(false);
   });
 });

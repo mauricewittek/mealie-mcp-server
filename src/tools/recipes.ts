@@ -141,7 +141,20 @@ const recipeIngredientInputSchema = z.object({
       'Stable UUID for this ingredient line. Recipe instructions can reference ingredients by this ID — pass ' +
         'back the value from a prior get_recipe_detailed to preserve those links; omit to let Mealie assign a new one.',
     ),
-});
+  referencedRecipeId: z
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      'UUID (the recipe\'s "id", stable across renames — not its slug) of an existing recipe to use as a ' +
+        'sub-recipe on this line, e.g. a sauce or spice mix. Read it back as referencedRecipe in ' +
+        'get_recipe_detailed. Cannot be combined with foodId/unitId on the same row. An id that matches no ' +
+        'recipe fails the call before anything is written.',
+    ),
+})
+  .refine((row) => !(row.referencedRecipeId && (row.foodId || row.unitId)), {
+    message: 'referencedRecipeId cannot be combined with foodId/unitId on the same ingredient row.',
+  });
 
 function recipeIngredientDeltaFields() {
   return {
@@ -169,7 +182,7 @@ function recipeIngredientDeltaFields() {
       ),
     updateIngredients: z
       .array(
-        recipeIngredientInputSchema.extend({
+        recipeIngredientInputSchema.safeExtend({
           referenceId: z.string().uuid().describe('referenceId of the existing row to update (from get_recipe_detailed).'),
         }),
       )
@@ -805,8 +818,12 @@ export function registerRecipeTools(server: McpServer) {
       'abbreviation/pluralAbbreviation for units). If verification fails (e.g. a nonexistent or mismatched ' +
       'foodId/unitId that Mealie silently dropped or resolved to the wrong entity), the recipe is restored to ' +
       'its pre-write state on a best-effort basis and this call reports failure — never a silent partial ' +
-      'write. Verification adds no extra request on success; a failed write adds one rollback request. ' +
-      'Alternatively, use the delta form (addIngredients/updateIngredients/removeIngredientReferenceIds, ' +
+      'write. Referenced recipes: a row may carry referencedRecipeId (an existing recipe\'s id) instead of a ' +
+      'food/unit to use that recipe as a sub-recipe; every referenced id is read first (an unknown id fails ' +
+      'the call and nothing is written), and after the write the persisted referencedRecipe must be non-null ' +
+      'with the same id or the recipe is restored like any other verification failure. Verification adds no ' +
+      'extra request on success beyond one GET per distinct referenced recipe; a failed write adds one ' +
+      'rollback request. Alternatively, use the delta form (addIngredients/updateIngredients/removeIngredientReferenceIds, ' +
       'instead of ingredients) to edit rows incrementally by stable referenceId: retained rows keep their ' +
       'order, updates edit in place, additions are appended or anchored with insertAfterReferenceId/' +
       'insertBeforeReferenceId, and ingredient sections are just rows with a "title". The delta is applied to ' +
@@ -855,7 +872,10 @@ export function registerRecipeTools(server: McpServer) {
       'back the others, and the response reports a success/failure result per recipe in the same order ' +
       'submitted. The whole call is rejected before any write starts only for a true request-shape problem — ' +
       `an empty batch, more than ${RECIPE_INGREDIENTS_BATCH_MAX_SIZE} recipes, a missing slug, or the same ` +
-      'slug repeated in one call. The same recipeInstructions-id-regeneration caveat as ' +
+      'slug repeated in one call. Rows may carry referencedRecipeId (sub-recipe by recipe id, instead of a ' +
+      'food/unit) exactly as in the singular tool: each distinct referenced id costs one extra GET per recipe ' +
+      '(counted in apiRequestCount) and an unknown id fails only that recipe, with nothing written for it. ' +
+      'The same recipeInstructions-id-regeneration caveat as ' +
       'update_recipe_ingredients applies to every recipe touched here (instruction content is preserved, only ' +
       'ids churn). Each entry uses either the complete-replacement form (ingredients) or the referenceId ' +
       'delta form (addIngredients/updateIngredients/removeIngredientReferenceIds) with the singular tool\'s ' +

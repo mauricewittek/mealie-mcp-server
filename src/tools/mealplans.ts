@@ -117,7 +117,7 @@ export function registerMealplanTools(server: McpServer) {
   // @endpoints POST /api/households/mealplans
   server.tool(
     'create_mealplan_bulk',
-    'Creates multiple meal plan entries at once via concurrent requests.',
+    'Creates multiple meal plan entries at once via bounded concurrent requests. Entries are independent: a failure of one does not stop or undo the others, so a partial failure leaves the successful entries written. Returns { created, failed, results } with one result per input entry in input order: { index, success: true, entry: { id, date, entryType, recipeId, title } } or { index, success: false, error }. The call is an error result only when every entry failed.',
     {
       entries: z.array(
         z.object({
@@ -129,16 +129,30 @@ export function registerMealplanTools(server: McpServer) {
       ),
     },
     async (params) => {
-      try {
-        const results = await Promise.all(
-          params.entries.map((entry) => mealplansApi.createMealplan(entry)),
-        );
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ message: `Successfully created ${results.length} entries` }) }],
-        };
-      } catch (error) {
-        return { content: [{ type: 'text' as const, text: (error as Error).message }], isError: true };
-      }
+      const results = await mapWithConcurrency(params.entries, DEFAULT_DETAIL_FETCH_CONCURRENCY, async (entry, index) => {
+        try {
+          const created = await mealplansApi.createMealplan(entry);
+          return {
+            index,
+            success: true as const,
+            entry: {
+              id: created.id,
+              date: created.date,
+              entryType: created.entryType,
+              recipeId: created.recipeId,
+              title: created.title,
+            },
+          };
+        } catch (error) {
+          return { index, success: false as const, error: error instanceof Error ? error.message : String(error) };
+        }
+      });
+      const created = results.filter((r) => r.success).length;
+      const failed = results.length - created;
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ created, failed, results }) }],
+        ...(created === 0 && failed > 0 ? { isError: true } : {}),
+      };
     },
   );
 

@@ -121,7 +121,7 @@
   Params: `date`, `recipeId`, `title`, `entryType`
 
 - `create_mealplan_bulk` — POST /api/households/mealplans
-  Creates multiple meal plan entries at once via concurrent requests.
+  Creates multiple meal plan entries at once via bounded concurrent requests. Entries are independent: a failure of one does not stop or undo the others, so a partial failure leaves the successful entries written. Returns { created, failed, results } with one result per input entry in input order: { index, success: true, entry: { id, date, entryType, recipeId, title } } or { index, success: false, error }. The call is an error result only when every entry failed.
   Params: `entries`
 
 - `get_all_mealplans` — GET /api/households/mealplans

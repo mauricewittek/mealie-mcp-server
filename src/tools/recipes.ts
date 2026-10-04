@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as recipesApi from '../api/recipes.js';
 import { buildTaxonomyPatch, updateRecipeTaxonomy, updateRecipeTaxonomyBatch } from '../lib/recipe-taxonomy.js';
 import { updateRecipeTools, updateRecipeToolsBatch, RECIPE_TOOLS_BATCH_MAX_SIZE } from '../lib/recipe-tools.js';
+import { resolveLastMadeTimestamp } from '../lib/last-made.js';
 import { resolveTaxonomyFilter } from '../lib/taxonomy-resolution.js';
 import { setRecipeImage } from '../lib/recipe-image.js';
 import { setRecipeRating, RECIPE_RATING_MIN, RECIPE_RATING_MAX, RECIPE_RATING_STEP } from '../lib/recipe-rating.js';
@@ -1131,11 +1132,15 @@ export function registerRecipeTools(server: McpServer) {
   // @endpoints PATCH /api/recipes/{slug}/last-made
   server.tool(
     'mark_recipe_last_made',
-    'Records the current timestamp as the recipe\'s last-made date.',
-    { slug: z.string() },
-    async ({ slug }) => {
+    'Records when a recipe was last made. Without `timestamp` it records now. `timestamp` is an ISO 8601 date-time ' +
+    '(e.g. 2026-09-29T18:45:00Z; without an offset it is local time) or a plain date (YYYY-MM-DD), which is stored ' +
+    'as noon local time on that day so time-zone conversion cannot shift it to the previous day (today is clamped ' +
+    'to now). Unparseable values and future times are rejected without calling Mealie. Mealie only moves a recipe\'s ' +
+    'lastMade forward: a timestamp older than the current lastMade is accepted but leaves it unchanged.',
+    { slug: z.string(), timestamp: z.string().optional() },
+    async ({ slug, timestamp }) => {
       try {
-        const result = await recipesApi.updateRecipeLastMade(slug);
+        const result = await recipesApi.updateRecipeLastMade(slug, resolveLastMadeTimestamp(timestamp));
         return successResponse(result);
       } catch (error) {
         return errorResponse(error);

@@ -82,7 +82,7 @@ export function strictify<T extends z.ZodType>(schema: T): T {
  */
 export function withStrictInputs(server: McpServer): McpServer {
   const strictTool = (...args: unknown[]): unknown => {
-    const handler = args[args.length - 1];
+    const handler = args.at(-1);
     const [name, description, shape] = args;
     const annotations = args.length === 5 ? args[3] : undefined;
     if (

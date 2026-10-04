@@ -2,6 +2,35 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import * as api from '../api/shopping-lists.js';
 
+// Mirrors Mealie's ShoppingListItemCreate (v3.20.1 /openapi.json). Strict, so a misspelled field is
+// rejected instead of silently dropped. unit/food/referencedRecipe are full entity objects and stay open.
+const shoppingListItemCreateSchema = z.object({
+  shoppingListId: z.string(),
+  id: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  display: z.string().optional(),
+  quantity: z.number().optional(),
+  checked: z.boolean().optional(),
+  position: z.number().int().optional(),
+  unitId: z.string().nullable().optional(),
+  foodId: z.string().nullable().optional(),
+  labelId: z.string().nullable().optional(),
+  unit: z.record(z.string(), z.unknown()).nullable().optional(),
+  food: z.record(z.string(), z.unknown()).nullable().optional(),
+  referencedRecipe: z.record(z.string(), z.unknown()).nullable().optional(),
+  extras: z.record(z.string(), z.unknown()).nullable().optional(),
+  recipeReferences: z
+    .array(
+      z.object({
+        recipeId: z.string(),
+        recipeQuantity: z.number().optional(),
+        recipeScale: z.number().nullable().optional(),
+        recipeNote: z.string().nullable().optional(),
+      }),
+    )
+    .optional(),
+});
+
 export function registerShoppingListTools(server: McpServer): void {
   // @endpoints GET /api/households/shopping/lists
   server.tool(
@@ -151,7 +180,7 @@ export function registerShoppingListTools(server: McpServer): void {
   server.tool(
     'create_shopping_list_items_bulk',
     'Creates multiple shopping list items at once.',
-    { items: z.array(z.record(z.string(), z.unknown())) },
+    { items: z.array(shoppingListItemCreateSchema).describe('Items to create; every item needs shoppingListId.') },
     async (params) => {
       try {
         const result = await api.createShoppingListItemsBulk(params.items);

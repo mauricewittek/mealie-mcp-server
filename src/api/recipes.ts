@@ -80,10 +80,11 @@ export async function duplicateRecipe(
   return apiPost(`/api/recipes/${slug}/duplicate`, name ? { name } : undefined);
 }
 
-export async function updateRecipeLastMade(slug: string): Promise<Record<string, unknown>> {
-  return apiPatch(`/api/recipes/${slug}/last-made`, {
-    timestamp: new Date().toISOString(),
-  });
+export async function updateRecipeLastMade(
+  slug: string,
+  timestamp: string,
+): Promise<Record<string, unknown>> {
+  return apiPatch(`/api/recipes/${slug}/last-made`, { timestamp });
 }
 
 export async function setRecipeImageFromUrl(

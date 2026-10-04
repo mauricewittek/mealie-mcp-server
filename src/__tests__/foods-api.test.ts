@@ -297,6 +297,35 @@ describe('updateFood', () => {
     expect(body).toMatchObject({ aliases: [] });
   });
 
+  it('preserves existing households when householdsWithIngredientFood is omitted', async () => {
+    mockGet.mockResolvedValue(existingFood());
+    mockPut.mockResolvedValue(existingFood());
+    await updateFood('food-1', { description: 'New description' });
+    const [, body] = mockPut.mock.calls[0];
+    expect(body).toMatchObject({ householdsWithIngredientFood: ['household-1'] });
+  });
+
+  it('replaces the household list, carrying other fields forward, when only householdsWithIngredientFood is given', async () => {
+    mockGet.mockResolvedValue(existingFood());
+    mockPut.mockResolvedValue(existingFood());
+    await updateFood('food-1', { householdsWithIngredientFood: ['family'] });
+    const [, body] = mockPut.mock.calls[0];
+    expect(body).toMatchObject({
+      name: 'Onion',
+      aliases: [{ name: 'yellow onion' }],
+      labelId: 'label-1',
+      householdsWithIngredientFood: ['family'],
+    });
+  });
+
+  it('clears the household list when an empty array is provided', async () => {
+    mockGet.mockResolvedValue(existingFood());
+    mockPut.mockResolvedValue(existingFood());
+    await updateFood('food-1', { householdsWithIngredientFood: [] });
+    const [, body] = mockPut.mock.calls[0];
+    expect(body).toMatchObject({ householdsWithIngredientFood: [] });
+  });
+
   it('preserves the existing label when labelId is omitted', async () => {
     mockGet.mockResolvedValue(existingFood());
     mockPut.mockResolvedValue(existingFood());

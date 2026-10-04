@@ -77,7 +77,7 @@ describe('registration', () => {
       ['name', 'pluralName', 'description', 'aliases', 'labelId'].sort(),
     );
     expect(Object.keys(schemaFor(calls, 'update_food')).sort()).toEqual(
-      ['foodId', 'name', 'pluralName', 'description', 'aliases', 'labelId'].sort(),
+      ['foodId', 'name', 'pluralName', 'description', 'aliases', 'labelId', 'householdsWithIngredientFood'].sort(),
     );
     expect(Object.keys(schemaFor(calls, 'delete_food'))).toEqual(['foodId']);
   });

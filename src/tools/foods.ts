@@ -144,7 +144,9 @@ export function registerFoodTools(server: McpServer): void {
   server.tool(
     'update_food',
     'Updates an existing food. Fields left unspecified keep their current value. Sufficient for adding an alias: ' +
-      'get_food the current record, append to its existing aliases, and pass the complete list back here.',
+      'get_food the current record, append to its existing aliases, and pass the complete list back here. ' +
+      'householdsWithIngredientFood (household slugs for which the food is on hand) is replaced whole the same ' +
+      'way: get_food first and edit the existing list.',
     {
       foodId: z.string().describe('UUID of the food to update.'),
       name: z.string().optional(),
@@ -164,6 +166,15 @@ export function registerFoodTools(server: McpServer): void {
         .describe(
           'ID of an existing food label to assign. Pass null to clear the food\'s label, or omit to leave the ' +
             'current label unchanged.',
+        ),
+      householdsWithIngredientFood: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Household slugs for which this food is flagged on hand (a food is on hand for a household when its ' +
+            'slug is in the list). Replaces the whole list when provided — call get_food first and edit the ' +
+            'existing list so another household\'s slug is not dropped by accident. Pass an empty array to clear ' +
+            'the flag for every household, or omit to leave it unchanged.',
         ),
     },
     async ({ foodId, ...rest }) => {

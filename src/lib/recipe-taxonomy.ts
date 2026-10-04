@@ -88,31 +88,48 @@ interface ResolveResult {
   missing: string[];
 }
 
+interface TaxonomyLookup {
+  find(key: string): TaxonomyItem | undefined;
+  add(item: TaxonomyItem, key: string): void;
+}
+
+function createLookup(existing: TaxonomyItem[]): TaxonomyLookup {
+  const byId = new Map<string, TaxonomyItem>();
+  const bySlug = new Map<string, TaxonomyItem>();
+  const byName = new Map<string, TaxonomyItem>();
+  const byCreatedKey = new Map<string, TaxonomyItem>();
+  for (const item of existing) {
+    byId.set(item.id.toLowerCase(), item);
+    bySlug.set(item.slug.toLowerCase(), item);
+    byName.set(item.name.toLowerCase(), item);
+  }
+  return {
+    find: (key) => byId.get(key) ?? bySlug.get(key) ?? byName.get(key) ?? byCreatedKey.get(key),
+    add: (item, key) => {
+      byCreatedKey.set(key, item);
+      byId.set(item.id.toLowerCase(), item);
+      bySlug.set(item.slug.toLowerCase(), item);
+      byName.set(item.name.toLowerCase(), item);
+    },
+  };
+}
+
 async function resolveTaxonomyValues(
   values: string[],
   existing: TaxonomyItem[],
   createMissing: boolean,
   createFn: (name: string) => Promise<Record<string, unknown>>,
 ): Promise<ResolveResult> {
-  const byId = new Map<string, TaxonomyItem>();
-  const bySlug = new Map<string, TaxonomyItem>();
-  const byName = new Map<string, TaxonomyItem>();
-  for (const item of existing) {
-    byId.set(item.id.toLowerCase(), item);
-    bySlug.set(item.slug.toLowerCase(), item);
-    byName.set(item.name.toLowerCase(), item);
-  }
-
+  const lookup = createLookup(existing);
   const resolvedMap = new Map<string, TaxonomyItem>();
   const created: TaxonomyItem[] = [];
   const missing: string[] = [];
-  const createdThisCall = new Map<string, TaxonomyItem>();
 
   for (const raw of values) {
     const value = raw.trim();
     if (!value) continue;
     const key = value.toLowerCase();
-    const match = byId.get(key) ?? bySlug.get(key) ?? byName.get(key) ?? createdThisCall.get(key);
+    const match = lookup.find(key);
     if (match) {
       resolvedMap.set(match.id, match);
       continue;
@@ -125,7 +142,7 @@ async function resolveTaxonomyValues(
 
     const createdRaw = await createFn(value);
     const item = toTaxonomyItem(createdRaw);
-    createdThisCall.set(key, item);
+    lookup.add(item, key);
     resolvedMap.set(item.id, item);
     created.push(item);
   }
@@ -158,6 +175,12 @@ function computeFinal(
   return { final: [...finalMap.values()], added, removed: [] };
 }
 
+/** Organizer listings fetched once for a whole batch, so per-recipe updates skip listing them again. */
+export interface SharedTaxonomyListings {
+  categories?: TaxonomyItem[];
+  tags?: TaxonomyItem[];
+}
+
 export interface TaxonomyPatchOutcome {
   patchFields: Record<string, unknown>;
   categories?: TaxonomyCollectionResult;
@@ -172,6 +195,7 @@ export interface TaxonomyPatchOutcome {
 export async function buildTaxonomyPatch(
   currentRecipe: Record<string, unknown>,
   input: TaxonomyUpdateInput,
+  shared?: SharedTaxonomyListings,
 ): Promise<TaxonomyPatchOutcome> {
   const mode = input.mode ?? 'merge';
   const createMissing = input.createMissing ?? false;
@@ -180,7 +204,7 @@ export async function buildTaxonomyPatch(
 
   if (input.categories !== undefined) {
     const current = toTaxonomyItems(currentRecipe.recipeCategory);
-    const all = await getAllCategories();
+    const all = shared?.categories ?? (await getAllCategories());
     const { resolved, created, missing } = await resolveTaxonomyValues(
       input.categories,
       all,
@@ -197,7 +221,7 @@ export async function buildTaxonomyPatch(
 
   if (input.tags !== undefined) {
     const current = toTaxonomyItems(currentRecipe.tags);
-    const all = await getAllTags();
+    const all = shared?.tags ?? (await getAllTags());
     const { resolved, created, missing } = await resolveTaxonomyValues(
       input.tags,
       all,
@@ -225,9 +249,10 @@ export async function buildTaxonomyPatch(
 export async function updateRecipeTaxonomy(
   slug: string,
   input: TaxonomyUpdateInput,
+  shared?: SharedTaxonomyListings,
 ): Promise<RecipeTaxonomyResult> {
   const recipe = await recipesApi.getRecipe(slug);
-  const outcome = await buildTaxonomyPatch(recipe, input);
+  const outcome = await buildTaxonomyPatch(recipe, input, shared);
 
   if (Object.keys(outcome.patchFields).length > 0) {
     await recipesApi.patchRecipe(slug, outcome.patchFields);
@@ -264,12 +289,120 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+interface KindPlan {
+  /** Organizers as listed, plus those created for the batch. */
+  listing?: TaxonomyItem[];
+  /** Organizers as listed, before the batch created any. */
+  existing?: TaxonomyItem[];
+  listingError?: Error;
+  createErrors: Map<string, Error>;
+  /** Organizers created for the batch, in creation order. */
+  created: TaxonomyItem[];
+}
+
+interface KindRequest {
+  values: string[];
+  createMissing: boolean;
+}
+
+/**
+ * Lists the organizers of one kind once and creates every value that createMissing updates
+ * need and that does not exist yet, one at a time. Failures are recorded per value so only
+ * the updates that need that value fail.
+ */
+async function prepareKind(
+  requests: KindRequest[],
+  getAll: () => Promise<TaxonomyItem[]>,
+  createFn: (name: string) => Promise<Record<string, unknown>>,
+): Promise<KindPlan | undefined> {
+  if (requests.length === 0) return undefined;
+
+  const plan: KindPlan = { createErrors: new Map(), created: [] };
+  try {
+    plan.listing = await getAll();
+    plan.existing = [...plan.listing];
+  } catch (error) {
+    plan.listingError = toError(error);
+    return plan;
+  }
+
+  const lookup = createLookup(plan.listing);
+  for (const request of requests) {
+    if (!request.createMissing) continue;
+    for (const raw of request.values) {
+      const value = raw.trim();
+      if (!value) continue;
+      const key = value.toLowerCase();
+      if (lookup.find(key) || plan.createErrors.has(key)) continue;
+      try {
+        const item = toTaxonomyItem(await createFn(value));
+        lookup.add(item, key);
+        plan.listing.push(item);
+        plan.created.push(item);
+      } catch (error) {
+        plan.createErrors.set(key, toError(error));
+      }
+    }
+  }
+  return plan;
+}
+
+function assertKindUsable(
+  plan: KindPlan | undefined,
+  update: RecipeTaxonomyBatchUpdate,
+  values: string[] | undefined,
+): void {
+  if (!plan || values === undefined) return;
+  if (plan.listingError) throw plan.listingError;
+  if (!update.createMissing) return;
+  for (const raw of values) {
+    const error = plan.createErrors.get(raw.trim().toLowerCase());
+    if (error) throw error;
+  }
+}
+
+/**
+ * Applies several taxonomy updates with bounded concurrency. Organizers are listed once per
+ * kind and missing ones are created up front, so concurrent recipes that need the same new
+ * organizer cannot race to create it. Each created organizer is reported on the first successful
+ * update that ends up using it.
+ */
 export async function updateRecipeTaxonomyBatch(
   updates: RecipeTaxonomyBatchUpdate[],
 ): Promise<RecipeTaxonomyBatchResult[]> {
-  return mapWithConcurrency(updates, BATCH_CONCURRENCY, async (update) => {
+  const requestsFor = (pick: (update: RecipeTaxonomyBatchUpdate) => string[] | undefined): KindRequest[] =>
+    updates.flatMap((update) => {
+      const values = pick(update);
+      return values === undefined ? [] : [{ values, createMissing: update.createMissing ?? false }];
+    });
+
+  const categoryPlan = await prepareKind(
+    requestsFor((update) => update.categories),
+    getAllCategories,
+    categoriesApi.createCategory,
+  );
+  const tagPlan = await prepareKind(
+    requestsFor((update) => update.tags),
+    getAllTags,
+    tagsApi.createTag,
+  );
+
+  const results = await mapWithConcurrency(updates, BATCH_CONCURRENCY, async (update) => {
     try {
-      const result = await updateRecipeTaxonomy(update.slug, update);
+      assertKindUsable(categoryPlan, update, update.categories);
+      assertKindUsable(tagPlan, update, update.tags);
+      // Updates without createMissing must not resolve values another update created.
+      const pick = (plan: KindPlan | undefined) => (update.createMissing ? plan?.listing : plan?.existing);
+      const result = await updateRecipeTaxonomy(update.slug, update, {
+        categories: pick(categoryPlan),
+        tags: pick(tagPlan),
+      });
+      if (result.categories) result.categories.created = [];
+      if (result.tags) result.tags.created = [];
       return { success: true as const, ...result };
     } catch (error) {
       return {
@@ -279,4 +412,25 @@ export async function updateRecipeTaxonomyBatch(
       };
     }
   });
+
+  reportCreated(results, 'categories', categoryPlan?.created ?? []);
+  reportCreated(results, 'tags', tagPlan?.created ?? []);
+  return results;
+}
+
+/** Lists each created organizer on the first successful result that ended up using it. */
+function reportCreated(
+  results: RecipeTaxonomyBatchResult[],
+  kind: 'categories' | 'tags',
+  created: TaxonomyItem[],
+): void {
+  for (const item of created) {
+    for (const result of results) {
+      const collection = result.success ? result[kind] : undefined;
+      if (collection?.final.some((final) => final.id === item.id)) {
+        collection.created.push(item);
+        break;
+      }
+    }
+  }
 }

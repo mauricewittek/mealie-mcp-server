@@ -292,4 +292,117 @@ describe('updateRecipeTaxonomyBatch', () => {
 
     expect(maxInFlight).toBeLessThanOrEqual(5);
   });
+
+  describe('missing organizers', () => {
+    const SPICY = { id: 'tag-3', name: 'Spicy', slug: 'spicy' };
+
+    beforeEach(() => {
+      mockGetRecipe.mockImplementation((slug: string) => Promise.resolve(baseRecipe({ slug })));
+    });
+
+    it('creates a value shared by concurrent updates once and lets every update use it', async () => {
+      mockCreateTag.mockResolvedValue(SPICY);
+
+      const updates = Array.from({ length: 6 }, (_, i) => ({
+        slug: `recipe-${i}`,
+        tags: ['Spicy'],
+        createMissing: true,
+      }));
+      const results = await updateRecipeTaxonomyBatch(updates);
+
+      expect(mockCreateTag).toHaveBeenCalledTimes(1);
+      expect(mockGetTags).toHaveBeenCalledTimes(1);
+      expect(results.every((r) => r.success)).toBe(true);
+      expect(mockPatchRecipe).toHaveBeenCalledTimes(6);
+      for (const call of mockPatchRecipe.mock.calls) {
+        expect((call[1].tags as { id: string }[]).map((t) => t.id)).toContain('tag-3');
+      }
+      const created = results.flatMap((r) => (r.success ? (r.tags?.created ?? []) : []));
+      expect(created).toEqual([SPICY]);
+    });
+
+    it('fails only the updates that need an organizer that could not be created', async () => {
+      mockCreateTag.mockRejectedValue(new Error('Mealie API error 500: boom'));
+
+      const results = await updateRecipeTaxonomyBatch([
+        { slug: 'needs-spicy', tags: ['Spicy'], createMissing: true },
+        { slug: 'also-spicy', tags: ['Quick', 'Spicy'], createMissing: true },
+        { slug: 'fine', tags: ['Dairy-Free'], createMissing: true },
+      ]);
+
+      expect(mockCreateTag).toHaveBeenCalledTimes(1);
+      const bySlug = new Map(results.map((r) => [r.slug, r]));
+      for (const slug of ['needs-spicy', 'also-spicy']) {
+        const result = bySlug.get(slug);
+        expect(result?.success).toBe(false);
+        if (result && !result.success) expect(result.error).toMatch(/boom/);
+      }
+      expect(bySlug.get('fine')?.success).toBe(true);
+    });
+
+    it('still fails an update without createMissing that names a missing value', async () => {
+      mockCreateTag.mockResolvedValue(SPICY);
+
+      const results = await updateRecipeTaxonomyBatch([
+        { slug: 'strict', tags: ['Spicy'] },
+        { slug: 'creator', tags: ['Spicy'], createMissing: true },
+      ]);
+
+      const strict = results.find((r) => r.slug === 'strict');
+      expect(strict?.success).toBe(false);
+      if (strict && !strict.success) expect(strict.error).toMatch(/do not exist: Spicy/);
+      expect(results.find((r) => r.slug === 'creator')?.success).toBe(true);
+    });
+
+    it('does not fail updates that never touch a kind whose listing failed', async () => {
+      mockGetCategories.mockRejectedValue(new Error('Mealie API error 500: categories down'));
+
+      const results = await updateRecipeTaxonomyBatch([
+        { slug: 'wants-category', categories: ['Dinner'] },
+        { slug: 'tags-only', tags: ['Quick'] },
+      ]);
+
+      const bySlug = new Map(results.map((r) => [r.slug, r]));
+      expect(bySlug.get('wants-category')?.success).toBe(false);
+      expect(bySlug.get('tags-only')?.success).toBe(true);
+    });
+
+    it('reuses a created organizer when another update names it by its slug', async () => {
+      const SPICY_FOOD = { id: 'tag-4', name: 'Spicy Food', slug: 'spicy-food' };
+      mockCreateTag.mockResolvedValue(SPICY_FOOD);
+
+      const results = await updateRecipeTaxonomyBatch([
+        { slug: 'by-name', tags: ['Spicy Food'], createMissing: true },
+        { slug: 'by-slug', tags: ['spicy-food'], createMissing: true },
+      ]);
+
+      expect(mockCreateTag).toHaveBeenCalledTimes(1);
+      expect(results.every((r) => r.success)).toBe(true);
+    });
+
+    it('reports a created organizer on a later update when the first requester fails', async () => {
+      mockCreateTag.mockResolvedValue(SPICY);
+      mockGetRecipe.mockImplementation((slug: string) =>
+        slug === 'broken'
+          ? Promise.reject(new Error('Mealie API error 404: Not Found'))
+          : Promise.resolve(baseRecipe({ slug })),
+      );
+
+      const results = await updateRecipeTaxonomyBatch([
+        { slug: 'broken', tags: ['Spicy'], createMissing: true },
+        { slug: 'unrelated', tags: ['Quick'] },
+        { slug: 'ok-1', tags: ['Spicy'], createMissing: true },
+        { slug: 'ok-2', tags: ['Spicy'], createMissing: true },
+      ]);
+
+      expect(mockCreateTag).toHaveBeenCalledTimes(1);
+      const created = (slug: string) => {
+        const result = results.find((r) => r.slug === slug);
+        return result?.success ? result.tags?.created : undefined;
+      };
+      expect(created('unrelated')).toEqual([]);
+      expect(created('ok-1')).toEqual([SPICY]);
+      expect(created('ok-2')).toEqual([]);
+    });
+  });
 });

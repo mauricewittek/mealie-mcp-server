@@ -91,6 +91,8 @@ Every value in `categories`/`tags` may be a name, a slug, or an ID — matching 
 
 Both tools return the recipe's `id`/`slug` plus, per collection, the `final` list after the update and which items were `added`, `removed`, or `created` — useful for confirming exactly what changed.
 
+In a batch, organizers requested with `createMissing: true` are created once up front (not once per recipe), and `created` lists each new organizer on the first successful entry that ends up using it. Entries without `createMissing` still fail on a value that did not already exist. If an organizer cannot be created, only the entries that need it fail, each with that error.
+
 ## Resolving or Creating a Food
 
 Foods are Mealie's reusable structured ingredient entities (e.g. "onion", "chicken breast") — the building blocks that a parsed recipe ingredient eventually points to, as distinct from the free-text ingredient notes on a recipe. Search existing foods before creating a new one: the name you need, or a close alias of it, often already exists, and creating a duplicate fragments the taxonomy.

@@ -1,6 +1,7 @@
 const PLAIN_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-// Pre-check: `new Date()` also accepts non-ISO input such as 'March 5'.
-const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?$/;
+// Pre-check: `new Date()` also accepts non-ISO input such as 'March 5'. Split in two so each regex stays simple.
+const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
+const UTC_OFFSET = /(?:Z|[+-]\d{2}:\d{2})$/;
 
 /**
  * Resolves the `timestamp` argument of `mark_recipe_last_made` to the ISO string sent to Mealie.
@@ -27,7 +28,7 @@ export function resolveLastMadeTimestamp(input: string | undefined, now: Date = 
     return (noon > now ? now : noon).toISOString();
   }
 
-  if (!ISO_DATE_TIME.test(input)) throw invalid(input);
+  if (!ISO_DATE_TIME.test(input.replace(UTC_OFFSET, ''))) throw invalid(input);
   const parsed = new Date(input);
   if (Number.isNaN(parsed.getTime())) throw invalid(input);
   if (parsed > now) throw new Error(futureMessage(input));

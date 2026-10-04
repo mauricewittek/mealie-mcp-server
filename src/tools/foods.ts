@@ -192,4 +192,27 @@ export function registerFoodTools(server: McpServer): void {
       }
     },
   );
+
+  // @endpoints GET /api/foods/{id}, PUT /api/foods/merge
+  server.tool(
+    'merge_foods',
+    'DESTRUCTIVE and irreversible: merges one food into another. Every recipe ingredient referencing the ' +
+      'from-food is moved to the to-food, and the from-food is permanently deleted. Its name and aliases are NOT ' +
+      'kept on the to-food — call update_food afterwards to add them as aliases if wanted. Mealie fails the merge ' +
+      'while shopping list items still reference the from-food, leaving both foods untouched; those items are not ' +
+      'moved, so find them with get_shopping_list_items and delete them first (delete_shopping_list_items_bulk). ' +
+      'Use get_food first to verify both foods. Returns the target food.',
+    {
+      fromFoodId: z.string().describe('UUID of the food to merge away; it is deleted.'),
+      toFoodId: z.string().describe('UUID of the food that remains and receives the references.'),
+    },
+    async ({ fromFoodId, toFoodId }) => {
+      try {
+        const result = await foodsApi.mergeFoods(fromFoodId, toFoodId);
+        return successResponse(result);
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
 }

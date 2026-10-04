@@ -7,10 +7,10 @@
 | Categories | 7 |
 | Tags | 7 |
 | Shopping Lists | 13 |
-| Foods | 6 |
+| Foods | 7 |
 | Units | 6 |
 | Tools | 6 |
-| **Total** | **75** |
+| **Total** | **76** |
 
 ## Recipes Operations (24)
 
@@ -247,7 +247,7 @@
   Updates a shopping list item's note, quantity, or checked status.
   Params: `itemId`, `note`, `quantity`, `checked`
 
-## Foods Operations (6)
+## Foods Operations (7)
 
 - `create_food` — POST /api/foods
   Creates a new food. Call get_foods first to check whether an existing food or alias already covers this name — creating a duplicate food fragments the taxonomy instead of reusing what is already there.
@@ -268,6 +268,10 @@
 - `get_foods` — GET /api/foods
   Lists and searches the household's foods (reusable structured ingredient entities such as "chicken breast" or "onion") with plain pagination. For resolving several already-interpreted food concepts to candidate IDs at once (e.g. after an LLM parses a batch of ingredients), prefer get_food_matches instead — it checks aliases too and answers many lookups in one call. Performs no fuzzy matching itself; matching is delegated entirely to Mealie's search.
   Params: `search`, `page`, `perPage`
+
+- `merge_foods` — GET /api/foods/{id}, PUT /api/foods/merge
+  DESTRUCTIVE and irreversible: merges one food into another. Every recipe ingredient referencing the from-food is moved to the to-food, and the from-food is permanently deleted. Its name and aliases are NOT kept on the to-food — call update_food afterwards to add them as aliases if wanted. Mealie fails the merge while shopping list items still reference the from-food, leaving both foods untouched; those items are not moved, so find them with get_shopping_list_items and delete them first (delete_shopping_list_items_bulk). Use get_food first to verify both foods. Returns the target food.
+  Params: `fromFoodId`, `toFoodId`
 
 - `update_food` — GET /api/foods/{id}, PUT /api/foods/{id}
   Updates an existing food. Fields left unspecified keep their current value. Sufficient for adding an alias: get_food the current record, append to its existing aliases, and pass the complete list back here.

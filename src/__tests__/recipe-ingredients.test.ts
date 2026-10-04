@@ -1453,3 +1453,99 @@ describe('updateRecipeIngredients — delta rollback', () => {
     expect(mockPatchRecipe.mock.calls[1][1]).toEqual({ recipeIngredient: original });
   });
 });
+
+describe('updateRecipeIngredients — referenced recipe rows', () => {
+  const SAUCE_ID = '11111111-2222-4333-8444-555555555555';
+
+  function recipeLookup(known: string[]) {
+    mockGetRecipe.mockImplementation((slugOrId: string) =>
+      known.includes(slugOrId)
+        ? Promise.resolve({ ...ORIGINAL_RECIPE, id: slugOrId })
+        : slugOrId === 'chicken-shawarma'
+          ? Promise.resolve({ ...ORIGINAL_RECIPE })
+          : Promise.reject(new MealieApiError(404, 'not found')),
+    );
+  }
+
+  it('sends only { id } as referencedRecipe, with no food or unit', async () => {
+    recipeLookup([SAUCE_ID]);
+
+    await updateRecipeIngredients('chicken-shawarma', [{ title: 'Sauce', quantity: 1, referencedRecipeId: SAUCE_ID }]);
+
+    expect(mockPatchRecipe).toHaveBeenCalledTimes(1);
+    expect(mockPatchRecipe.mock.calls[0][1]).toEqual({
+      recipeIngredient: [
+        { food: null, unit: null, title: 'Sauce', quantity: 1, referencedRecipe: { id: SAUCE_ID } },
+      ],
+    });
+  });
+
+  it('fails an unknown referenced id before writing anything', async () => {
+    recipeLookup([]);
+
+    await expect(
+      updateRecipeIngredients('chicken-shawarma', [{ quantity: 1, referencedRecipeId: SAUCE_ID }]),
+    ).rejects.toThrow(/does not match any recipe/);
+
+    expect(mockPatchRecipe).not.toHaveBeenCalled();
+  });
+
+  it('rejects a row referencing the recipe being edited, before writing', async () => {
+    mockGetRecipe.mockResolvedValue({ ...ORIGINAL_RECIPE, id: SAUCE_ID });
+
+    await expect(
+      updateRecipeIngredients('chicken-shawarma', [{ quantity: 1, referencedRecipeId: SAUCE_ID.toUpperCase() }]),
+    ).rejects.toThrow(/cannot reference itself/);
+
+    expect(mockGetRecipe).toHaveBeenCalledTimes(1);
+    expect(mockPatchRecipe).not.toHaveBeenCalled();
+  });
+
+  it('rejects a reference combined with a food or unit, before any network call', async () => {
+    await expect(
+      updateRecipeIngredients('chicken-shawarma', [
+        { referencedRecipeId: SAUCE_ID, foodId: 'food-1', foodName: 'onion' },
+      ]),
+    ).rejects.toThrow(/cannot be combined/);
+    await expect(
+      updateRecipeIngredients('chicken-shawarma', [
+        { referencedRecipeId: SAUCE_ID, unitId: 'unit-1', unitName: 'cup' },
+      ]),
+    ).rejects.toThrow(/cannot be combined/);
+
+    expect(mockGetRecipe).not.toHaveBeenCalled();
+    expect(mockPatchRecipe).not.toHaveBeenCalled();
+  });
+
+  it('restores the original recipe when Mealie persists the row without the reference', async () => {
+    recipeLookup([SAUCE_ID]);
+    mockPatchRecipe
+      .mockResolvedValueOnce({ recipeIngredient: [{ referencedRecipe: null }] })
+      .mockResolvedValueOnce({ recipeIngredient: ORIGINAL_RECIPE.recipeIngredient });
+
+    await expect(
+      updateRecipeIngredients('chicken-shawarma', [{ quantity: 1, referencedRecipeId: SAUCE_ID }]),
+    ).rejects.toThrow(IngredientVerificationError);
+
+    expect(mockPatchRecipe).toHaveBeenCalledTimes(2);
+    expect(mockPatchRecipe.mock.calls[1][1]).toEqual({ recipeIngredient: ORIGINAL_RECIPE.recipeIngredient });
+  });
+
+});
+
+describe('updateRecipeIngredients — referenced recipe id case', () => {
+  it('accepts an uppercase referencedRecipeId against Mealie\'s lowercase ids', async () => {
+    const id = '11111111-2222-4333-8444-aaaaaaaaaaaa';
+    mockGetRecipe.mockImplementation((slugOrId: string) =>
+      Promise.resolve(slugOrId === id ? { ...ORIGINAL_RECIPE, id } : { ...ORIGINAL_RECIPE }),
+    );
+
+    await expect(
+      updateRecipeIngredients('chicken-shawarma', [{ quantity: 1, referencedRecipeId: id.toUpperCase() }]),
+    ).resolves.toBeDefined();
+
+    expect(mockPatchRecipe.mock.calls[0][1]).toMatchObject({
+      recipeIngredient: [{ referencedRecipe: { id } }],
+    });
+  });
+});

@@ -13,6 +13,12 @@ export interface RecipeIngredientInput {
   originalText?: string | null;
   title?: string | null;
   referenceId?: string;
+  referencedRecipeId?: string;
+}
+
+// Mealie returns lowercase UUIDs; the tool schema accepts any case, so compare on lowercase.
+function referencedIdOf(input: RecipeIngredientInput): string | undefined {
+  return input.referencedRecipeId?.trim().toLowerCase() || undefined;
 }
 
 function requirePairedField(idValue: string | undefined, nameValue: string | undefined, idLabel: string, nameLabel: string): void {
@@ -36,6 +42,14 @@ function toMealieIngredient(input: RecipeIngredientInput): Record<string, unknow
   requirePairedField(input.foodId, input.foodName, 'foodId', 'foodName');
   requirePairedField(input.unitId, input.unitName, 'unitId', 'unitName');
 
+  const referencedRecipeId = referencedIdOf(input);
+  if (referencedRecipeId && (input.foodId?.trim() || input.unitId?.trim())) {
+    throw new Error(
+      'referencedRecipeId cannot be combined with foodId/unitId — a row that references a recipe is a ' +
+        'sub-recipe, not a food.',
+    );
+  }
+
   const foodId = input.foodId?.trim();
   const foodName = input.foodName?.trim();
   const unitId = input.unitId?.trim();
@@ -52,6 +66,10 @@ function toMealieIngredient(input: RecipeIngredientInput): Record<string, unknow
   if (input.originalText !== undefined) payload.originalText = input.originalText;
   if (input.title !== undefined) payload.title = input.title;
   if (input.referenceId !== undefined) payload.referenceId = input.referenceId;
+  // Live probe (Mealie v3.20.1): `{ id }` alone is enough for Mealie to persist the reference and
+  // expand it on read; name/slug/full recipe add nothing. An unknown id is silently dropped to
+  // null, so the id is resolved before the write (resolveReferencedRecipes) and re-checked after.
+  if (referencedRecipeId) payload.referencedRecipe = { id: referencedRecipeId };
 
   return payload;
 }
@@ -67,7 +85,9 @@ function toMealieIngredient(input: RecipeIngredientInput): Record<string, unknow
 // indication anything went wrong.
 //
 // Pre-validating every foodId/unitId against Mealie before writing would add a GET per referenced
-// food/unit to every write, which defeats the point of doing structured writes in bulk. Instead,
+// food/unit to every write, which defeats the point of doing structured writes in bulk. (Referenced
+// recipes are the one deliberate exception — see resolveReferencedRecipes — because a Mealie
+// referencedRecipe is dropped to null without any food/unit-style hint.) Instead,
 // this verifies the recipe object Mealie already hands back from the write itself — no extra
 // request on the successful path. Verification is deterministic and intentionally narrow: it
 // checks that the ingredient count is preserved and that any requested food/unit *association*
@@ -157,14 +177,25 @@ function verifyPersistedIngredients(requested: RecipeIngredientInput[], persiste
         return `Ingredient ${i} requested unitId '${unitId}' with unitName '${unitName}', but Mealie persisted unit '${unit.id}' named '${String(unit.name)}'.`;
       }
     }
+
+    const referencedRecipeId = referencedIdOf(req);
+    if (referencedRecipeId) {
+      const referenced = persistedIngredient.referencedRecipe as Record<string, unknown> | null | undefined;
+      if (!referenced) {
+        return `Ingredient ${i} requested referencedRecipeId '${referencedRecipeId}', but Mealie persisted no referenced recipe.`;
+      }
+      if (referenced.id !== referencedRecipeId) {
+        return `Ingredient ${i} requested referencedRecipeId '${referencedRecipeId}', but Mealie persisted referenced recipe '${String(referenced.id)}'.`;
+      }
+    }
   }
 
   return null;
 }
 
 /**
- * Thrown when the recipe Mealie returned from the write does not preserve a requested food/unit
- * association. `rollbackSucceeded` reports whether the pre-write recipe snapshot was successfully
+ * Thrown when the recipe Mealie returned from the write does not preserve a requested food/unit/
+ * referenced-recipe association. `rollbackSucceeded` reports whether the pre-write recipe snapshot was successfully
  * restored; when it's false, `rollbackError` carries the restore attempt's own failure message and
  * the recipe may be left in a partially-written state requiring manual inspection.
  */
@@ -569,6 +600,44 @@ function buildRollbackIngredients(
   });
 }
 
+// Mealie silently drops a referencedRecipe whose id does not exist (row persisted with null), so
+// every distinct referenced id is read before anything is written: an unknown id fails the call
+// with a clear error and the recipe is never touched. Returns the number of GETs made.
+async function resolveReferencedRecipes(ingredients: RecipeIngredientInput[]): Promise<number> {
+  const ids = new Set<string>();
+  for (const ingredient of ingredients) {
+    const id = referencedIdOf(ingredient);
+    if (id) ids.add(id);
+  }
+
+  await Promise.all(
+    [...ids].map(async (id) => {
+      let referenced: Record<string, unknown>;
+      try {
+        referenced = await recipesApi.getRecipe(id);
+      } catch (error) {
+        if (error instanceof MealieApiError && error.status === 404) {
+          throw new Error(`referencedRecipeId '${id}' does not match any recipe in Mealie. No changes were written.`);
+        }
+        throw error;
+      }
+      if (referenced.id !== id) {
+        throw new Error(`referencedRecipeId '${id}' resolved to a different recipe ('${String(referenced.id)}'). No changes were written.`);
+      }
+    }),
+  );
+  return ids.size;
+}
+
+// A recipe referencing itself would expand into itself on read. The recipe's own id is already
+// known from the pre-write GET, so this costs no extra request.
+function rejectSelfReference(original: Record<string, unknown>, ingredients: RecipeIngredientInput[]): void {
+  const ownId = typeof original.id === 'string' ? original.id.toLowerCase() : undefined;
+  if (ownId && ingredients.some((ingredient) => referencedIdOf(ingredient) === ownId)) {
+    throw new Error(`referencedRecipeId '${ownId}' is the recipe being edited — a recipe cannot reference itself. No changes were written.`);
+  }
+}
+
 async function writeVerifiedIngredients(slug: string, plan: IngredientPlan): Promise<IngredientWriteResult> {
   let requestCount = 0;
   let original: Record<string, unknown>;
@@ -582,6 +651,8 @@ async function writeVerifiedIngredients(slug: string, plan: IngredientPlan): Pro
     original = await recipesApi.getRecipe(slug);
     requestCount += 1;
     built = replaced ?? buildDeltaIngredients(original, (plan as { delta: RecipeIngredientDelta }).delta);
+    rejectSelfReference(original, built.inputs);
+    requestCount += await resolveReferencedRecipes(built.inputs);
     updated = await recipesApi.patchRecipe(slug, { recipeIngredient: built.payload });
     requestCount += 1;
   } catch (error) {

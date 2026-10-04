@@ -101,6 +101,28 @@ export async function createFood(input: CreateFoodInput): Promise<Record<string,
   }
 }
 
+// Mealie's PUT is a full replace of the CreateIngredientFood shape, so fields the
+// caller didn't ask to change must be carried forward from the existing record.
+function buildUpdatePayload(
+  existing: Record<string, unknown>,
+  input: UpdateFoodInput,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  for (const field of UPDATABLE_FOOD_FIELDS) {
+    if (field in existing) payload[field] = existing[field];
+  }
+
+  if (input.name !== undefined) payload.name = input.name;
+  if (input.pluralName !== undefined) payload.pluralName = input.pluralName;
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.aliases !== undefined) payload.aliases = toAliasPayload(input.aliases);
+  if (input.labelId !== undefined) payload.labelId = input.labelId;
+  if (input.householdsWithIngredientFood !== undefined) {
+    payload.householdsWithIngredientFood = input.householdsWithIngredientFood;
+  }
+  return payload;
+}
+
 export async function updateFood(
   foodId: string,
   input: UpdateFoodInput,
@@ -123,24 +145,7 @@ export async function updateFood(
 
   try {
     const existing = await apiGet<Record<string, unknown>>(`/api/foods/${id}`);
-
-    // Mealie's PUT is a full replace of the CreateIngredientFood shape, so fields the
-    // caller didn't ask to change must be carried forward from the existing record.
-    const payload: Record<string, unknown> = {};
-    for (const field of UPDATABLE_FOOD_FIELDS) {
-      if (field in existing) payload[field] = existing[field];
-    }
-
-    if (input.name !== undefined) payload.name = input.name;
-    if (input.pluralName !== undefined) payload.pluralName = input.pluralName;
-    if (input.description !== undefined) payload.description = input.description;
-    if (input.aliases !== undefined) payload.aliases = toAliasPayload(input.aliases);
-    if (input.labelId !== undefined) payload.labelId = input.labelId;
-    if (input.householdsWithIngredientFood !== undefined) {
-      payload.householdsWithIngredientFood = input.householdsWithIngredientFood;
-    }
-
-    return await apiPut<Record<string, unknown>>(`/api/foods/${id}`, payload);
+    return await apiPut<Record<string, unknown>>(`/api/foods/${id}`, buildUpdatePayload(existing, input));
   } catch (error) {
     if (error instanceof MealieApiError && error.status === 404) {
       wrapError(`Food not found: ${id}`, error);

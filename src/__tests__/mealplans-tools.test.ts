@@ -15,6 +15,7 @@ vi.mock('../api/recipes.js', () => ({
 }));
 
 import * as mealplansApi from '../api/mealplans.js';
+import { getRecipesBatch } from '../api/recipes.js';
 import { registerMealplanTools } from '../tools/mealplans.js';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<{
@@ -44,6 +45,8 @@ function handlerFor(calls: Map<string, unknown[]>, name: string): ToolHandler {
   return rest[rest.length - 1] as ToolHandler;
 }
 
+const mockGetMealplans = vi.mocked(mealplansApi.getMealplans);
+const mockGetRecipesBatch = vi.mocked(getRecipesBatch);
 const mockCreateMealplan = vi.mocked(mealplansApi.createMealplan);
 const mockGetMealplan = vi.mocked(mealplansApi.getMealplan);
 const mockUpdateMealplan = vi.mocked(mealplansApi.updateMealplan);
@@ -66,6 +69,25 @@ describe('registration', () => {
     expect(calls.has('create_mealplan_bulk')).toBe(true);
     expect(calls.has('get_todays_mealplan')).toBe(true);
     expect(calls.has('patch_mealplan')).toBe(true);
+  });
+});
+
+describe('get_mealplan_with_recipes tool', () => {
+  it('collects entries from every page', async () => {
+    const entry = (n: number) => ({ id: n, date: '2026-10-08' });
+    const first = Array.from({ length: 100 }, (_, i) => entry(i));
+    const second = Array.from({ length: 5 }, (_, i) => entry(100 + i));
+    mockGetMealplans
+      .mockResolvedValueOnce({ items: first, total: 105, page: 1, size: 100 })
+      .mockResolvedValueOnce({ items: second, total: 105, page: 2, size: 100 });
+    mockGetRecipesBatch.mockResolvedValue({});
+
+    const handler = handlerFor(calls, 'get_mealplan_with_recipes');
+    const response = await handler({ startDate: '2026-10-08', endDate: '2026-10-08' });
+
+    expect(JSON.parse(response.content[0].text)).toHaveLength(105);
+    expect(mockGetMealplans).toHaveBeenCalledTimes(2);
+    expect(mockGetMealplans.mock.calls[1][0]).toMatchObject({ page: 2 });
   });
 });
 

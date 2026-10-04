@@ -3,9 +3,11 @@ import { apiGet, apiPost, apiPut, apiDelete, formatParams, PaginatedResult } fro
 export function getMealplans(
   params?: { startDate?: string; endDate?: string; page?: number; perPage?: number },
 ): Promise<PaginatedResult<Record<string, unknown>>> {
+  // Mealie's query params are snake_case; camelCase startDate/endDate are silently ignored.
+  const { startDate, endDate, page, perPage } = params ?? {};
   return apiGet<PaginatedResult<Record<string, unknown>>>(
     '/api/households/mealplans',
-    params ? formatParams(params) : undefined,
+    formatParams({ start_date: startDate, end_date: endDate, page, perPage }),
   );
 }
 

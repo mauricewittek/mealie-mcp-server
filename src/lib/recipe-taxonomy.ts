@@ -89,7 +89,7 @@ interface ResolveResult {
 }
 
 interface TaxonomyLookup {
-  find(key: string): TaxonomyItem | undefined;
+  get(key: string): TaxonomyItem | undefined;
   add(item: TaxonomyItem, key: string): void;
 }
 
@@ -104,7 +104,7 @@ function createLookup(existing: TaxonomyItem[]): TaxonomyLookup {
     byName.set(item.name.toLowerCase(), item);
   }
   return {
-    find: (key) => byId.get(key) ?? bySlug.get(key) ?? byName.get(key) ?? byCreatedKey.get(key),
+    get: (key) => byId.get(key) ?? bySlug.get(key) ?? byName.get(key) ?? byCreatedKey.get(key),
     add: (item, key) => {
       byCreatedKey.set(key, item);
       byId.set(item.id.toLowerCase(), item);
@@ -129,7 +129,7 @@ async function resolveTaxonomyValues(
     const value = raw.trim();
     if (!value) continue;
     const key = value.toLowerCase();
-    const match = lookup.find(key);
+    const match = lookup.get(key);
     if (match) {
       resolvedMap.set(match.id, match);
       continue;
@@ -309,6 +309,29 @@ interface KindRequest {
   createMissing: boolean;
 }
 
+/** Creates the values that neither exist nor already failed, one at a time, recording each outcome on the plan. */
+async function createMissingValues(
+  plan: KindPlan,
+  lookup: TaxonomyLookup,
+  values: string[],
+  createFn: (name: string) => Promise<Record<string, unknown>>,
+): Promise<void> {
+  for (const raw of values) {
+    const value = raw.trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (lookup.get(key) || plan.createErrors.has(key)) continue;
+    try {
+      const item = toTaxonomyItem(await createFn(value));
+      lookup.add(item, key);
+      plan.listing?.push(item);
+      plan.created.push(item);
+    } catch (error) {
+      plan.createErrors.set(key, toError(error));
+    }
+  }
+}
+
 /**
  * Lists the organizers of one kind once and creates every value that createMissing updates
  * need and that does not exist yet, one at a time. Failures are recorded per value so only
@@ -332,20 +355,8 @@ async function prepareKind(
 
   const lookup = createLookup(plan.listing);
   for (const request of requests) {
-    if (!request.createMissing) continue;
-    for (const raw of request.values) {
-      const value = raw.trim();
-      if (!value) continue;
-      const key = value.toLowerCase();
-      if (lookup.find(key) || plan.createErrors.has(key)) continue;
-      try {
-        const item = toTaxonomyItem(await createFn(value));
-        lookup.add(item, key);
-        plan.listing.push(item);
-        plan.created.push(item);
-      } catch (error) {
-        plan.createErrors.set(key, toError(error));
-      }
+    if (request.createMissing) {
+      await createMissingValues(plan, lookup, request.values, createFn);
     }
   }
   return plan;

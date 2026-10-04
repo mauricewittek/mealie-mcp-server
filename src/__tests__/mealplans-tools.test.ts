@@ -291,3 +291,65 @@ describe('patch_mealplan tool', () => {
     });
   });
 });
+
+describe('create_mealplan_bulk tool', () => {
+  interface BulkResponse {
+    created: number;
+    failed: number;
+    results: Array<{
+      index: number;
+      success: boolean;
+      entry?: { id: string; date: string; entryType: string; recipeId?: string | null; title?: string };
+      error?: string;
+    }>;
+  }
+
+  const entries = [
+    { date: '2099-01-01', recipeId: 'r1', entryType: 'dinner' },
+    { date: '2099-01-02', title: 'Leftovers', entryType: 'lunch' },
+  ];
+
+  it('returns one success result per entry in input order', async () => {
+    mockCreateMealplan.mockImplementation((e) =>
+      Promise.resolve({ id: `id-${e.date}`, ...e, userId: 'u', groupId: 'g' }),
+    );
+
+    const response = await handlerFor(calls, 'create_mealplan_bulk')({ entries });
+
+    expect(response.isError).toBeUndefined();
+    const body = JSON.parse(response.content[0].text) as BulkResponse;
+    expect(body.created).toBe(2);
+    expect(body.failed).toBe(0);
+    expect(body.results).toEqual([
+      { index: 0, success: true, entry: { id: 'id-2099-01-01', date: '2099-01-01', entryType: 'dinner', recipeId: 'r1' } },
+      { index: 1, success: true, entry: { id: 'id-2099-01-02', date: '2099-01-02', entryType: 'lunch', title: 'Leftovers' } },
+    ]);
+  });
+
+  it('keeps successes and reports the failure on a partial failure', async () => {
+    mockCreateMealplan
+      .mockResolvedValueOnce({ id: 'ok-1', date: '2099-01-01', entryType: 'dinner', recipeId: 'r1' })
+      .mockRejectedValueOnce(new Error('recipe not found'));
+
+    const response = await handlerFor(calls, 'create_mealplan_bulk')({ entries });
+
+    expect(response.isError).toBeUndefined();
+    const body = JSON.parse(response.content[0].text) as BulkResponse;
+    expect(body.created).toBe(1);
+    expect(body.failed).toBe(1);
+    expect(body.results[0]).toMatchObject({ index: 0, success: true, entry: { id: 'ok-1' } });
+    expect(body.results[1]).toEqual({ index: 1, success: false, error: 'recipe not found' });
+  });
+
+  it('returns an error result only when every entry failed', async () => {
+    mockCreateMealplan.mockRejectedValueOnce(new Error('boom')).mockRejectedValueOnce(new Error('boom'));
+
+    const response = await handlerFor(calls, 'create_mealplan_bulk')({ entries });
+
+    expect(response.isError).toBe(true);
+    const body = JSON.parse(response.content[0].text) as BulkResponse;
+    expect(body.created).toBe(0);
+    expect(body.failed).toBe(2);
+    expect(body.results.map((r) => r.error)).toEqual(['boom', 'boom']);
+  });
+});

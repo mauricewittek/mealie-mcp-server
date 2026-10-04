@@ -10,6 +10,18 @@ function successResponse(result: unknown) {
   };
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MEALPLAN_PAGE_SIZE = 100;
+
+async function getAllMealplanItems(startDate: string, endDate: string): Promise<Record<string, unknown>[]> {
+  const items: Record<string, unknown>[] = [];
+  for (let page = 1; ; page++) {
+    const result = await mealplansApi.getMealplans({ startDate, endDate, page, perPage: MEALPLAN_PAGE_SIZE });
+    items.push(...result.items);
+    if (result.items.length === 0 || items.length >= result.total) return items;
+  }
+}
+
 function errorResponse(error: unknown) {
   return {
     content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }],
@@ -23,8 +35,8 @@ export function registerMealplanTools(server: McpServer) {
     'get_all_mealplans',
     'Lists meal plans with optional date range filtering and pagination.',
     {
-      startDate: z.string().optional(),
-      endDate: z.string().optional(),
+      startDate: z.string().regex(DATE_RE, 'Expected YYYY-MM-DD').optional(),
+      endDate: z.string().regex(DATE_RE, 'Expected YYYY-MM-DD').optional(),
       page: z.number().optional(),
       perPage: z.number().optional(),
     },
@@ -43,13 +55,14 @@ export function registerMealplanTools(server: McpServer) {
     'get_mealplan_with_recipes',
     'Returns meal plans with embedded recipe details (full recipe data fetched via batch requests with bounded concurrency).',
     {
-      startDate: z.string(),
-      endDate: z.string(),
+      startDate: z.string().regex(DATE_RE, 'Expected YYYY-MM-DD'),
+      endDate: z.string().regex(DATE_RE, 'Expected YYYY-MM-DD'),
     },
     async (params) => {
       try {
-        const mealplansResult = await mealplansApi.getMealplans({ startDate: params.startDate, endDate: params.endDate });
-        const filtered = mealplansResult.items.filter(
+        const allItems = await getAllMealplanItems(params.startDate, params.endDate);
+        // Mealie filters by date server-side; keep this as a guard so an ignored or mis-named param can't leak out-of-range entries.
+        const filtered = allItems.filter(
           (item) => {
             const date = item.date as string | undefined;
             return date !== undefined && date >= params.startDate && date <= params.endDate;

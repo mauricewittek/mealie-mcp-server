@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.17.1...v1.18.0) (2026-10-07)
+
+
+### Features
+
+* add set_recipe_rating tool ([1454807](https://github.com/timo-reymann/mealie-mcp-server/commit/14548075ebe9d27020801d9541111cf7ef92dd6d))
+
 ## [1.17.1](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.17.0...v1.17.1) (2026-10-07)
 
 

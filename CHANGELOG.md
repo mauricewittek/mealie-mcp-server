@@ -1,3 +1,10 @@
+## [1.17.1](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.17.0...v1.17.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* send mealplan date range as start_date/end_date ([3c4e95d](https://github.com/timo-reymann/mealie-mcp-server/commit/3c4e95d754223bab8852b3fff588165ff8dd1619))
+
 # [1.17.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.16.0...v1.17.0) (2026-10-07)
 
 

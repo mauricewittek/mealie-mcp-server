@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
 import { registerAllTools } from '../tools/index.js';
 
 const ROOT = process.cwd();
@@ -23,10 +24,18 @@ async function loadGeneratedTools(): Promise<GeneratedTool[]> {
 /** Records exactly what each server.tool() call receives at runtime. */
 function captureRegisteredTools(): Map<string, { description: string; keys: string[] }> {
   const captured = new Map<string, { description: string; keys: string[] }>();
+  // registerAllTools wraps the server in withStrictInputs, which forwards to registerTool
+  // with a strict input schema. Both entry points are recorded so the fake stays faithful
+  // to what the SDK receives.
+  const record = (name: string, description: string, shape: z.ZodRawShape) => {
+    captured.set(name, { description, keys: Object.keys(shape) });
+  };
   const fakeServer = {
-    tool: (name: string, description: string, shape: Record<string, unknown>) => {
-      captured.set(name, { description, keys: Object.keys(shape) });
-    },
+    tool: record,
+    registerTool: (
+      name: string,
+      config: { description?: string; inputSchema?: z.ZodObject<z.ZodRawShape> },
+    ) => record(name, config.description ?? '', config.inputSchema?.shape ?? {}),
   };
   registerAllTools(fakeServer as unknown as McpServer);
   return captured;

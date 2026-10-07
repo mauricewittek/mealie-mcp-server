@@ -63,8 +63,8 @@
   Params: `cursor`, `limit`, `state`
 
 - `mark_recipe_last_made` — PATCH /api/recipes/{slug}/last-made
-  Records the current timestamp as the recipe's last-made date.
-  Params: `slug`
+  Records when a recipe was last made. Without `timestamp` it records now. `timestamp` is an ISO 8601 date-time (e.g. 2026-09-29T18:45:00Z; without an offset it is local time) or a plain date (YYYY-MM-DD), which is stored as noon local time on that day so time-zone conversion cannot shift it to the previous day (today is clamped to now). Unparseable values and future times are rejected without calling Mealie. Mealie only moves a recipe's lastMade forward: a timestamp older than the current lastMade is accepted but leaves it unchanged.
+  Params: `slug`, `timestamp`
 
 - `patch_recipe` — GET /api/recipes/{slug}, PATCH /api/recipes/{slug}
   Partially updates a recipe. Also accepts optional categories/tags/taxonomyMode/createMissing for taxonomy assignment. Unchanged Category/Tag collections are never written; if taxonomy is the only thing requested and nothing changes, no PATCH is issued and the current recipe is returned with taxonomyChanges.
@@ -278,8 +278,8 @@
   Params: `fromFoodId`, `toFoodId`
 
 - `update_food` — GET /api/foods/{id}, PUT /api/foods/{id}
-  Updates an existing food. Fields left unspecified keep their current value. Sufficient for adding an alias: get_food the current record, append to its existing aliases, and pass the complete list back here.
-  Params: `foodId`, `name`, `pluralName`, `description`, `aliases`, `labelId`
+  Updates an existing food. Fields left unspecified keep their current value. Sufficient for adding an alias: get_food the current record, append to its existing aliases, and pass the complete list back here. householdsWithIngredientFood (household slugs for which the food is on hand) is replaced whole the same way: get_food first and edit the existing list.
+  Params: `foodId`, `name`, `pluralName`, `description`, `aliases`, `labelId`, `householdsWithIngredientFood`
 
 ## Units Operations (6)
 

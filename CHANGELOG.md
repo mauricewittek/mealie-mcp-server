@@ -1,3 +1,13 @@
+# [1.19.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.18.0...v1.19.0) (2026-10-07)
+
+
+### Features
+
+* accept householdsWithIngredientFood in update_food ([78fe343](https://github.com/timo-reymann/mealie-mcp-server/commit/78fe3430f6673224921b57983cb200e458d707b9))
+* accept instructions in patch_recipe ([c057aaf](https://github.com/timo-reymann/mealie-mcp-server/commit/c057aaf477a2520a80cc5c2eb4169263a62cb570))
+* reject undeclared tool arguments instead of dropping them ([084b6e2](https://github.com/timo-reymann/mealie-mcp-server/commit/084b6e287d587607487ab8f06ee2784b273c7a12))
+* report a result per entry in create_mealplan_bulk ([f87e384](https://github.com/timo-reymann/mealie-mcp-server/commit/f87e384804d442f02216d75b4356530077ab0c41))
+
 # [1.18.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.17.1...v1.18.0) (2026-10-07)
 
 

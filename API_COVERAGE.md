@@ -63,8 +63,8 @@
   Params: `cursor`, `limit`, `state`
 
 - `mark_recipe_last_made` — PATCH /api/recipes/{slug}/last-made
-  Records the current timestamp as the recipe's last-made date.
-  Params: `slug`
+  Records when a recipe was last made. Without `timestamp` it records now. `timestamp` is an ISO 8601 date-time (e.g. 2026-09-29T18:45:00Z; without an offset it is local time) or a plain date (YYYY-MM-DD), which is stored as noon local time on that day so time-zone conversion cannot shift it to the previous day (today is clamped to now). Unparseable values and future times are rejected without calling Mealie. Mealie only moves a recipe's lastMade forward: a timestamp older than the current lastMade is accepted but leaves it unchanged.
+  Params: `slug`, `timestamp`
 
 - `patch_recipe` — GET /api/recipes/{slug}, PATCH /api/recipes/{slug}
   Partially updates a recipe. Optional categories/tags/taxonomyMode/createMissing assign taxonomy; unchanged Category/Tag collections are never written and, if taxonomy is the only thing requested and nothing changes, no PATCH is issued and the current recipe is returned with taxonomyChanges. Optional instructions is the complete new list of steps (not a patch): it replaces all steps, [] clears them, omitting it leaves them unchanged.

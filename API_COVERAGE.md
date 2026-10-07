@@ -278,8 +278,8 @@
   Params: `fromFoodId`, `toFoodId`
 
 - `update_food` — GET /api/foods/{id}, PUT /api/foods/{id}
-  Updates an existing food. Fields left unspecified keep their current value. Sufficient for adding an alias: get_food the current record, append to its existing aliases, and pass the complete list back here.
-  Params: `foodId`, `name`, `pluralName`, `description`, `aliases`, `labelId`
+  Updates an existing food. Fields left unspecified keep their current value. Sufficient for adding an alias: get_food the current record, append to its existing aliases, and pass the complete list back here. householdsWithIngredientFood (household slugs for which the food is on hand) is replaced whole the same way: get_food first and edit the existing list.
+  Params: `foodId`, `name`, `pluralName`, `description`, `aliases`, `labelId`, `householdsWithIngredientFood`
 
 ## Units Operations (6)
 

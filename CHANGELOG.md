@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.20.0...v1.21.0) (2026-10-07)
+
+
+### Features
+
+* accept referencedRecipeId in update_recipe_ingredients ([7096baf](https://github.com/timo-reymann/mealie-mcp-server/commit/7096bafbb3240e6dc05cc2ab6ea26d508e0c2a89))
+
 # [1.20.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.19.0...v1.20.0) (2026-10-07)
 
 

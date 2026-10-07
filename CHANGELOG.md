@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.19.0...v1.20.0) (2026-10-07)
+
+
+### Features
+
+* add timestamp to mark_recipe_last_made ([2ee8f3b](https://github.com/timo-reymann/mealie-mcp-server/commit/2ee8f3bf1493ecf01ebbf93f085134e913fc2750))
+
 # [1.19.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.18.0...v1.19.0) (2026-10-07)
 
 

@@ -1,3 +1,21 @@
+# [1.16.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.15.0...v1.16.0) (2026-10-07)
+
+
+### Bug Fixes
+
+* support complete generated tool descriptions ([347226c](https://github.com/timo-reymann/mealie-mcp-server/commit/347226c80bb239aa7e4bf48461b2d164ad69a06a))
+
+
+### Features
+
+* add delta recipe taxonomy updates ([02bed82](https://github.com/timo-reymann/mealie-mcp-server/commit/02bed8293bf6dd73213e553259db2fda02440ec5))
+* add direct recipe image mutation ([b1d066f](https://github.com/timo-reymann/mealie-mcp-server/commit/b1d066f86f0ebf0b3cba4c35c0e8d34a79ca38fe))
+* add guarded recipe instruction and ingredient-reference updates ([8ffbef7](https://github.com/timo-reymann/mealie-mcp-server/commit/8ffbef728bc8a46433d2b7cba30b549475f2c34d))
+* add holistic recipe data enrichment queue ([a207efd](https://github.com/timo-reymann/mealie-mcp-server/commit/a207efd4e623d3d29820fde05f080cb22c20c879))
+* add recipe Tool organizers and verified recipe Tool updates ([17fe34a](https://github.com/timo-reymann/mealie-mcp-server/commit/17fe34ac6f61630e7bf99a07557e27a28bb6f927))
+* add referenceId-based recipe ingredient delta updates ([2a30949](https://github.com/timo-reymann/mealie-mcp-server/commit/2a309492f61c9ce3254a6e5f71905a43f193a312))
+* add shared deterministic recipe enrichment audit model ([db197a3](https://github.com/timo-reymann/mealie-mcp-server/commit/db197a3f6ead3b481da812b230a938817be95ec7))
+
 # [1.15.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.14.0...v1.15.0) (2026-09-02)
 
 

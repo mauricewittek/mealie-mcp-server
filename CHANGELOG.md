@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.16.0...v1.17.0) (2026-10-07)
+
+
+### Features
+
+* add merge_foods tool ([3f66dae](https://github.com/timo-reymann/mealie-mcp-server/commit/3f66daeb33d57359eab3b1ba79745415a920b216))
+
 # [1.16.0](https://github.com/timo-reymann/mealie-mcp-server/compare/v1.15.0...v1.16.0) (2026-10-07)
 
 
